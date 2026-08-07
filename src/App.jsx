@@ -1,23 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import AddressSearch from './components/AddressSearch.jsx';
+import KeyGate from './components/KeyGate.jsx';
 import LayerToggles from './components/LayerToggles.jsx';
 import Legend from './components/Legend.jsx';
 import MapView from './components/MapView.jsx';
 import ReadoutPanel from './components/ReadoutPanel.jsx';
+import { useApiKey } from './hooks/useApiKey.js';
 import { useLookup, floodPoint } from './hooks/useLookup.js';
+import { maskKey } from './lib/apiKey.js';
 import { classifyZone } from './lib/floodStyle.js';
-
-const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const DEFAULT_LAYERS = { floodTiles: false, tract: true, floodPolygon: true };
 
 export default function App() {
+  const { apiKey, source, hasBuildKey, persistFailed, saveKey, forgetKey } = useApiKey();
   const { place, census, tract, flood, lookup, retryCensus, retryTract, retryFlood } = useLookup();
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [notice, setNotice] = useState(null);
   const [expanded, setExpanded] = useState(true);
   const [mapsError, setMapsError] = useState(null);
+  const [keyPanelOpen, setKeyPanelOpen] = useState(false);
 
   const handleLayerChange = useCallback((key, value) => {
     setLayers((current) => ({ ...current, [key]: value }));
@@ -43,11 +46,15 @@ export default function App() {
   const activeZoneKey =
     flood.status === 'ok' && flood.mapped ? classifyZone(flood.attributes) : null;
 
-  if (!API_KEY) return <MissingKey />;
+  // Without a key the Maps script cannot load at all, so the gate is the whole
+  // page rather than an overlay.
+  if (!apiKey) {
+    return <KeyGate variant="setup" persistFailed={persistFailed} onSubmit={saveKey} />;
+  }
 
   return (
     <APIProvider
-      apiKey={API_KEY}
+      apiKey={apiKey}
       libraries={['places']}
       version="weekly"
       onError={(error) => setMapsError(error?.message || 'Google Maps failed to load.')}
@@ -75,9 +82,29 @@ export default function App() {
 
             {(notice || mapsError) && (
               <p className="banner" role="alert">
-                {mapsError || notice}
+                <span>{mapsError || notice}</span>
+                {mapsError && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--tiny"
+                    onClick={() => setKeyPanelOpen(true)}
+                  >
+                    Change key
+                  </button>
+                )}
               </p>
             )}
+
+            <p className="keychip">
+              <span className="keychip__label">Maps key</span>
+              <code data-mono>{maskKey(apiKey)}</code>
+              <span className="keychip__source">
+                {source === 'stored' ? 'this browser' : 'built in'}
+              </span>
+              <button type="button" className="linkbtn" onClick={() => setKeyPanelOpen(true)}>
+                change
+              </button>
+            </p>
           </div>
 
           <div className="hud__side">
@@ -105,41 +132,20 @@ export default function App() {
           />
         </div>
       </div>
+
+      {keyPanelOpen && (
+        <KeyGate
+          variant="overlay"
+          currentKey={apiKey}
+          source={source}
+          hasBuildKey={hasBuildKey}
+          persistFailed={persistFailed}
+          loadError={mapsError}
+          onSubmit={saveKey}
+          onForget={forgetKey}
+          onCancel={() => setKeyPanelOpen(false)}
+        />
+      )}
     </APIProvider>
-  );
-}
-
-/** Without a key the Maps script can't load at all, so say exactly what to do. */
-function MissingKey() {
-  useEffect(() => {
-    document.title = 'Land Master — configuration needed';
-  }, []);
-
-  return (
-    <main className="setup">
-      <h1 className="setup__title">
-        Land<span className="brand__mark-alt">Master</span>
-      </h1>
-      <p className="setup__lede">
-        No Google Maps key found. Land Master reads it from{' '}
-        <code data-mono>VITE_GOOGLE_MAPS_API_KEY</code> at build time.
-      </p>
-      <ol className="setup__steps">
-        <li>
-          Copy <code data-mono>.env.example</code> to <code data-mono>.env</code>.
-        </li>
-        <li>
-          Set <code data-mono>VITE_GOOGLE_MAPS_API_KEY</code> to a browser key with the Maps
-          JavaScript API and Places API enabled.
-        </li>
-        <li>
-          Restart <code data-mono>npm run dev</code> — Vite only reads env files at startup.
-        </li>
-      </ol>
-      <p className="setup__note">
-        For GitHub Pages, add the same value as the repository secret{' '}
-        <code data-mono>VITE_GOOGLE_MAPS_API_KEY</code>; the deploy workflow injects it at build.
-      </p>
-    </main>
   );
 }

@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { AdvancedMarker, Map, Marker, useMap } from '@vis.gl/react-google-maps';
+import { MAP_ID } from '../lib/env.js';
 import { femaTileUrl } from '../lib/fema.js';
 import { floodFeatureStyle } from '../lib/floodStyle.js';
-
-const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || undefined;
 
 /** Continental US, so the first paint is never an empty ocean. */
 const DEFAULT_CENTER = { lat: 39.5, lng: -98.35 };

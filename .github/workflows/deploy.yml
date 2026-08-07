@@ -37,18 +37,21 @@ jobs:
 
       - name: Build
         env:
-          # Vite inlines VITE_* vars at build time. The key comes from the repo
-          # secret so it is never committed; it is still visible in the shipped
-          # bundle, which is why the key must be HTTP-referrer restricted.
+          # Optional. Vite inlines VITE_* vars at build time. With the secret
+          # set, the site works out of the box for every visitor; without it,
+          # visitors supply their own key, which the app keeps in their browser.
+          # Either way the key is never committed — and a baked-in key is still
+          # readable in the shipped bundle, so it must be referrer-restricted.
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           VITE_GOOGLE_MAPS_MAP_ID: ${{ secrets.VITE_GOOGLE_MAPS_MAP_ID }}
         run: npm run build
 
-      - name: Fail fast if the key was not injected
+      - name: Report which key mode was built
         run: |
           if [ -z "${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}" ]; then
-            echo "::error::VITE_GOOGLE_MAPS_API_KEY repo secret is not set — the deployed site would show the setup screen."
-            exit 1
+            echo "::warning::No VITE_GOOGLE_MAPS_API_KEY secret — the site will ask each visitor for their own Google Maps key."
+          else
+            echo "Built with a build-time Maps key; visitors can still override it with their own."
           fi
 
       - uses: actions/configure-pages@v5
