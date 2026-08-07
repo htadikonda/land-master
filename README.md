@@ -30,12 +30,39 @@ NFHL `export` endpoint. Map tiles are images, so they're not CORS-restricted.
 
 ---
 
+## The Google Maps key
+
+The key can come from either of two places, and a key typed into the app always
+wins:
+
+1. **Typed into the app.** On first load, Land Master asks for a Google Maps
+   browser key and keeps it in that browser's `localStorage`. Nothing is sent
+   anywhere but Google — there is no backend to send it to. This means the site
+   can be deployed with no secret configured at all, and each visitor brings
+   their own key.
+2. **`VITE_GOOGLE_MAPS_API_KEY`**, inlined at build time. Set it and the site
+   works out of the box for everyone; a visitor can still override it with their
+   own key from the "change" link next to the search box.
+
+Either way the key is never committed. A build-time key is readable in the
+shipped bundle, so the HTTP-referrer restriction — not secrecy — is what
+protects it.
+
+Swapping keys reloads the page: the Maps JavaScript API can only be loaded once
+per page and the key is baked into that script's URL, so there is no honest way
+to hot-swap it.
+
 ## Quick start
 
 ```bash
 npm install
+npm run dev               # http://localhost:5173, then paste your key in the app
+```
+
+To skip the prompt during development, put the key in a `.env` instead:
+
+```bash
 cp .env.example .env      # then paste your key into .env
-npm run dev               # http://localhost:5173
 ```
 
 Other commands:
@@ -51,17 +78,16 @@ npm run preview # serve the production build locally
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a
    project and enable **Maps JavaScript API** and **Places API (New)**.
 2. Create an **API key** under *APIs & Services → Credentials*.
-3. Restrict it — this matters, because on a static site the key ships inside
-   the JS bundle and is readable by anyone:
+3. Restrict it:
    - **Application restrictions → Websites (HTTP referrers)**:
      - `http://localhost:5173/*`
      - `https://<your-github-username>.github.io/land-master/*`
    - **API restrictions**: Maps JavaScript API, Places API (New)
-4. Put it in `.env` as `VITE_GOOGLE_MAPS_API_KEY=...`.
+4. Paste it into the app when prompted, or put it in `.env` as
+   `VITE_GOOGLE_MAPS_API_KEY=...`.
 
 `.env` is gitignored. Vite only reads env files at startup, so restart
-`npm run dev` after changing it. Without a key the app renders a setup screen
-explaining exactly this, instead of a blank map.
+`npm run dev` after changing it.
 
 `VITE_GOOGLE_MAPS_MAP_ID` is optional — set it to a Cloud console Map ID to get
 vector maps and the custom HTML marker; without it the app uses a raster map and
@@ -74,17 +100,20 @@ a classic marker.
 One-time repository setup:
 
 1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-2. **Settings → Secrets and variables → Actions → New repository secret**
+2. *(Optional)* **Settings → Secrets and variables → Actions → New repository
+   secret**
    - Name: `VITE_GOOGLE_MAPS_API_KEY`
    - Value: your browser key
    - (Optionally add `VITE_GOOGLE_MAPS_MAP_ID` the same way.)
+
+   Skip this and the deployed site simply asks each visitor for their own key.
+   The workflow logs a warning in that case but still deploys.
 3. Add `https://<your-github-username>.github.io/land-master/*` to the key's
    HTTP-referrer restrictions.
 
 After that, every push to `main` runs `.github/workflows/deploy.yml`, which does
-`npm ci` → `npm test` → `npm run build` with the key injected from the secret →
-publishes `dist/` with `actions/deploy-pages`. The workflow fails loudly if the
-secret is missing, rather than silently shipping a keyless site.
+`npm ci` → `npm test` → `npm run build` (injecting the secret if present) →
+publishes `dist/` with `actions/deploy-pages`.
 
 Your site lands at `https://<your-github-username>.github.io/land-master/`.
 
@@ -111,7 +140,9 @@ src/
   App.jsx                      Layout, layer state, APIProvider
   styles.css                   All styling (plain CSS + custom properties)
   hooks/useLookup.js           Orchestrates the three sources independently
+  hooks/useApiKey.js           Maps key: resolution, persistence, reload-on-swap
   components/
+    KeyGate.jsx                Key entry — full page, or a dialog to change it
     AddressSearch.jsx          Places autocomplete (3-tier fallback)
     MapView.jsx                Map, marker, Data layers, FEMA tile overlay
     ReadoutPanel.jsx           Readout card / bottom sheet
@@ -124,6 +155,8 @@ src/
     esri.js                    Esri JSON → GeoJSON (fallback path)
     floodStyle.js              Zone classification and colors
     placeParse.js              Normalizes both Google Places shapes
+    apiKey.js                  Key precedence, validation, masking, storage
+    env.js                     Build-time env reads (isolated for testability)
     fips.js                    State FIPS → name
 test/                          Unit tests (node:test)
 ```
