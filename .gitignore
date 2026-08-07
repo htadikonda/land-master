@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Local env files — the Maps key must never be committed.
+.env
+.env.*
+!.env.example
+
+.DS_Store
+.vite/
+*.log
+npm-debug.log*
+.idea/
+.vscode/*
+!.vscode/extensions.json

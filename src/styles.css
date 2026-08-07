@@ -1,0 +1,983 @@
+/* =========================================================================
+   Land Master — field-instrument / GIS console.
+   Deep ink chassis, cool paper type, topo-green accent, FEMA legend colors.
+   ========================================================================= */
+
+:root {
+  --font-display: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Chassis */
+  --ink-950: #060d0d;
+  --ink-900: #0b1416;
+  --ink-800: #111d1e;
+  --ink-700: #18282a;
+  --ink-600: #22383a;
+
+  /* Type on ink */
+  --paper: #e7efeb;
+  --paper-dim: #a3b5b0;
+  --paper-faint: #6f8480;
+
+  /* Accents */
+  --topo: #3ddc97;
+  --topo-deep: #1a7f5c;
+  --amber: #f0b23f;
+  --danger: #f2705a;
+
+  /* Hairlines and glass */
+  --line: rgba(150, 190, 180, 0.16);
+  --line-strong: rgba(150, 190, 180, 0.32);
+  --glass: rgba(11, 20, 22, 0.86);
+  --glass-raise: rgba(17, 29, 30, 0.9);
+
+  --radius: 4px;
+  --radius-lg: 6px;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+
+  --hud-gap: 16px;
+  --panel-w: 384px;
+  --sheet-peek: 76px;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--paper);
+  background: var(--ink-950);
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-mono],
+code {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  letter-spacing: -0.01em;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--topo);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+/* The HUD floats over the map; only its controls capture pointer events. */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: var(--hud-gap);
+  display: grid;
+  grid-template-columns: minmax(280px, 400px) 1fr var(--panel-w);
+  grid-template-rows: auto 1fr;
+  gap: var(--hud-gap);
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+
+.hud__top {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hud__side {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 320px;
+}
+
+/* --------------------------------------------------------------- brand --- */
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.brand__mark {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--paper);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+.brand__mark-alt {
+  color: var(--topo);
+}
+
+.brand__sub {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--paper-dim);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+/* -------------------------------------------------------------- search --- */
+
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.search__label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  font-family: var(--font-mono);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+/* Framed like an instrument readout: corner rule + inset glow. */
+.search__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  border-left: 2px solid var(--topo);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0 10px;
+  backdrop-filter: blur(8px);
+}
+
+.search__glyph {
+  color: var(--topo);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.search__host {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The Places web component renders its own input in shadow DOM; it inherits
+   font and color, and we control the frame around it. */
+.lm-autocomplete-element {
+  width: 100%;
+  --gmp-mat-color-surface: transparent;
+  --gmp-mat-color-on-surface: var(--paper);
+  font-family: var(--font-body);
+  color: var(--paper);
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 12px 0;
+}
+
+.search__input::placeholder {
+  color: var(--paper-faint);
+}
+
+.search__input:focus {
+  outline: none;
+}
+
+.search__field:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow), 0 0 0 2px rgba(61, 220, 151, 0.35);
+}
+
+.search__submit {
+  flex-shrink: 0;
+  background: var(--topo);
+  color: var(--ink-950);
+  border: 0;
+  border-radius: 3px;
+  padding: 7px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search__hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--paper-dim);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+/* Legacy Places dropdown lives outside our tree — restyle it globally. */
+.pac-container {
+  background: var(--glass-raise);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-family: var(--font-body);
+  margin-top: 6px;
+}
+
+.pac-item {
+  border-top: 1px solid var(--line);
+  color: var(--paper-dim);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.pac-item:first-child {
+  border-top: 0;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background: var(--ink-700);
+}
+
+.pac-item-query,
+.pac-matched {
+  color: var(--paper);
+}
+
+.pac-icon {
+  filter: grayscale(1) brightness(2);
+}
+
+.banner {
+  margin: 0;
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  border-left: 2px solid var(--amber);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+/* ------------------------------------------------------------- toggles --- */
+
+.toggles,
+.legend {
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  padding: 10px 12px;
+}
+
+.toggles {
+  margin: 0;
+  border-left: 2px solid var(--ink-600);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toggles__legend,
+.legend__title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  padding: 0;
+  margin: 0 0 2px;
+}
+
+.toggles__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.toggles__row:has(input:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.toggles__row input {
+  accent-color: var(--topo);
+  margin: 2px 0 0;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.toggles__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.toggles__label {
+  color: var(--paper);
+}
+
+.toggles__hint {
+  font-size: 11px;
+  color: var(--paper-faint);
+}
+
+/* -------------------------------------------------------------- legend --- */
+
+.legend__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--paper-dim);
+}
+
+.legend__item.is-active {
+  color: var(--paper);
+}
+
+.legend__swatch {
+  width: 16px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--swatch) 45%, transparent);
+  border: 1px solid var(--swatch);
+}
+
+.legend__here {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-950);
+  background: var(--topo);
+  border-radius: 2px;
+  padding: 1px 4px;
+}
+
+/* ------------------------------------------------------------- readout --- */
+
+.readout {
+  grid-column: 3;
+  grid-row: 1 / -1;
+  /* Hug the content, but never grow past the viewport — the body scrolls. */
+  align-self: start;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--topo);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+/* Desktop: the address gets the full width and the status chip sits beneath it.
+   Mobile turns this into a single row — see the sheet rules below. */
+.readout__peek {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(61, 220, 151, 0.07), transparent);
+}
+
+.readout__peek-text {
+  min-width: 0;
+  width: 100%;
+}
+
+.readout__eyebrow {
+  margin: 0 0 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+
+.readout__address {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  color: var(--paper);
+}
+
+.readout__handle {
+  display: none;
+}
+
+.readout__body {
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.readout__coords {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--topo);
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------------- chip --- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 5px 9px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.chip--alert {
+  color: var(--amber);
+  background: rgba(240, 178, 63, 0.12);
+}
+
+.chip--safe {
+  color: var(--topo);
+  background: rgba(61, 220, 151, 0.12);
+}
+
+.chip--danger {
+  color: var(--danger);
+  background: rgba(242, 112, 90, 0.12);
+}
+
+.chip--neutral {
+  color: var(--paper-dim);
+  background: rgba(160, 190, 185, 0.08);
+}
+
+/* The loudest element in the panel: the zone code, set large in mono. */
+.zone-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--zone) 55%, transparent);
+  border-left: 4px solid var(--zone);
+  background: color-mix(in srgb, var(--zone) 14%, transparent);
+}
+
+.zone-display__code {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--zone);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--zone) 55%, transparent);
+}
+
+.zone-display__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.zone-display__label {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--paper);
+  line-height: 1.2;
+}
+
+.zone-display__blurb {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--paper-dim);
+}
+
+/* ---------------------------------------------------------------- card --- */
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(6, 13, 13, 0.55);
+  overflow: hidden;
+}
+
+.card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(24, 40, 42, 0.5);
+}
+
+.card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--paper);
+}
+
+.card__source {
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+
+.card__content {
+  padding: 11px 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------------------------------------------------------- data grid --- */
+
+.grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(88px, auto) 1fr;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.grid__row {
+  display: contents;
+}
+
+.grid__key,
+.grid__val {
+  margin: 0;
+  padding: 6px 9px;
+  background: var(--ink-900);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.grid__key {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--paper-faint);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+}
+
+.grid__val {
+  color: var(--paper);
+  word-break: break-word;
+}
+
+.grid__val[data-empty] {
+  color: var(--paper-faint);
+}
+
+/* --------------------------------------------------------- misc states --- */
+
+.note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--paper-dim);
+}
+
+.note--muted {
+  color: var(--paper-faint);
+  font-size: 11.5px;
+}
+
+.note--warn {
+  color: var(--danger);
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--paper);
+}
+
+.btn--ghost:hover {
+  border-color: var(--topo);
+  color: var(--topo);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skeleton__bar {
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--ink-700), var(--ink-600), var(--ink-700));
+  background-size: 200% 100%;
+  animation: sweep 1.4s linear infinite;
+}
+
+.skeleton__bar--short {
+  width: 55%;
+}
+
+@keyframes sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* -------------------------------------------------------------- marker --- */
+
+.marker {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+
+.marker__ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--topo);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(61, 220, 151, 0.6);
+}
+
+.marker__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--topo);
+}
+
+/* --------------------------------------------------------- setup screen -- */
+
+.setup {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 12vh 24px 24px;
+}
+
+.setup__title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+
+.setup__lede {
+  color: var(--paper-dim);
+  margin: 0 0 18px;
+}
+
+.setup__steps {
+  padding-left: 18px;
+  color: var(--paper-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup__note {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--paper-faint);
+}
+
+.setup code,
+.readout code {
+  background: var(--ink-800);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+  color: var(--topo);
+}
+
+/* ------------------------------------------------------- responsive ------ */
+
+@media (max-width: 1080px) {
+  :root {
+    --panel-w: 330px;
+  }
+}
+
+@media (max-width: 860px) {
+  /* No horizontal padding on the grid itself: the sheet is an absolutely
+     positioned grid item, so its containing block is the grid AREA. Padding
+     here would inset the sheet asymmetrically instead of letting it span the
+     full width. The children carry the gutter instead. */
+  .hud {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    padding: 12px 0 calc(var(--sheet-peek) + 12px);
+  }
+
+  .hud__top,
+  .hud__side {
+    padding-inline: 12px;
+  }
+
+  .hud__top {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  /* Controls sit just above the sheet peek and scroll sideways at 375px. */
+  .hud__side {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: row;
+    align-items: flex-end;
+    max-width: none;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .hud__side::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hud__side > * {
+    flex: 0 0 auto;
+    max-width: 260px;
+  }
+
+  /* An open sheet owns the screen; the controls would only be occluded. */
+  .hud.is-sheet-open .hud__side {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .readout {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    grid-column: 1;
+    grid-row: 3;
+    max-height: 78dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: 0;
+    transform: translateY(calc(100% - var(--sheet-peek)));
+    transition: transform 0.28s cubic-bezier(0.22, 0.8, 0.3, 1);
+  }
+
+  .readout.is-expanded {
+    transform: translateY(0);
+  }
+
+  .readout__peek {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    min-height: var(--sheet-peek);
+  }
+
+  .readout__peek-text {
+    flex: 1;
+    width: auto;
+  }
+
+  .readout__peek .chip {
+    flex-shrink: 0;
+  }
+
+  .readout__address {
+    font-size: 14px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* visibility:hidden also drops the collapsed content out of the tab order. */
+  .readout__body {
+    visibility: hidden;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+
+  .readout.is-expanded .readout__body {
+    visibility: visible;
+  }
+
+  .readout__handle {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--ink-800);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .readout__handle-icon {
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid var(--paper);
+    border-bottom: 2px solid var(--paper);
+    transform: translateY(-2px) rotate(-135deg);
+    transition: transform 0.2s ease;
+  }
+
+  .readout.is-expanded .readout__handle-icon {
+    transform: translateY(2px) rotate(45deg);
+  }
+
+  .chip {
+    font-size: 10px;
+    padding: 4px 7px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand__mark {
+    font-size: 21px;
+  }
+
+  .brand__sub {
+    font-size: 9px;
+  }
+
+  .readout__peek {
+    gap: 6px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
